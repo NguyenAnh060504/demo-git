@@ -1,2 +1,311 @@
-xinchaogit
-toi dang hoc git branch
+/// tùy chỉnh
+// ====== CSS cho popup ======
+const style = document.createElement("style");
+style.innerHTML = `
+  #autoBuyPopup {
+    position: fixed;
+    top: 50px;
+    left: 50px;
+    background: #666666;
+    color: #333333;
+    border: 1px solid #333;
+    z-index: 9999;
+    width: 180px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    border-radius: 5px;
+  }
+  #autoBuyPopup .popupHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #555;
+    color: white;
+    padding: 5px;
+    cursor: move;
+    border-bottom: 1px solid #333;
+  }
+  #autoBuyPopup .toggleBtn {
+    background: none;
+    border: none;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #autoBuyPopup button {
+    margin: 3px 0;
+    width: 100%;
+    padding: 5px;
+    cursor: pointer;
+    border: none;
+    font-weight: bold;
+    border-radius: 3px;
+  }
+  #startBtn {
+    background: #4CAF50;
+    color: white;
+  }
+  #stopBtn {
+    background: #E53935;
+    color: white;
+  }
+  #logBox {
+    margin-top: 10px;
+    max-height: 100px;
+    overflow-y: auto;
+    background: #555;
+    color: #eee;
+    font-size: 12px;
+    padding: 5px;
+    border-radius: 5px;
+  }
+`;
+document.head.appendChild(style);
+
+// ====== HTML popup ======
+const popup = document.createElement("div");
+popup.id = "autoBuyPopup";
+popup.innerHTML = `
+  <div class="popupHeader" id="popupHeader">
+    <span style="font-weight:bold;">Auto Buy Control</span>
+    <button class="toggleBtn" id="togglePopup">−</button>
+  </div>
+  <div id="popupContent">
+    <label><input type="checkbox" id="chkSeed" checked> Buy Seed</label><br>
+    <label><input type="checkbox" id="chkEgg" checked> Buy Egg</label><br>
+    <label><input type="checkbox" id="chkTool"> Buy Tool</label><br>
+    <label><input type="checkbox" id="chkFeed"> Feed Pet</label><br><br>
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+    <div id="logBox"><div>📜 Log:</div></div>
+  </div>
+`;
+document.body.appendChild(popup);
+
+// ====== Kéo popup ======
+(function dragElement(elmnt, handle) {
+  let pos1=0,pos2=0,pos3=0,pos4=0;
+  handle.onmousedown = dragMouseDown;
+  function dragMouseDown(e) {
+    e.preventDefault();
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    document.onmouseup = closeDragElement;
+    document.onmousemove = elementDrag;
+  }
+  function elementDrag(e) {
+    e.preventDefault();
+    pos1 = pos3 - e.clientX;
+    pos2 = pos4 - e.clientY;
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+    elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+  }
+  function closeDragElement() {
+    document.onmouseup = null;
+    document.onmousemove = null;
+  }
+})(popup, document.getElementById("popupHeader"));
+
+// ====== Toggle thu nhỏ ======
+document.getElementById("togglePopup").onclick = () => {
+  const content = document.getElementById("popupContent");
+  const btn = document.getElementById("togglePopup");
+  if (content.style.display === "none") {
+    content.style.display = "block";
+    btn.textContent = "−";
+  } else {
+    content.style.display = "none";
+    btn.textContent = "+";
+  }
+};
+
+// ====== JS Logic ======
+class Mutex {
+  constructor() { this._queue = []; this._locked = false; }
+  acquire() {
+    if (!this._locked) { this._locked = true; return Promise.resolve(() => this.release()); }
+    return new Promise(resolve => { this._queue.push(() => { this._locked = true; resolve(() => this.release()); }); });
+  }
+  release() {
+    if (this._queue.length > 0) { const next = this._queue.shift(); next(); }
+    else { this._locked = false; }
+  }
+}
+const mutex = new Mutex();
+
+let loopInterval = null;
+let isRunning = false;
+
+// Ghi log
+function addLog(msg) {
+  console.log(msg);
+  const logBox = document.getElementById("logBox");
+  if (logBox) {
+    const line = document.createElement("div");
+    line.textContent = msg;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+}
+
+function clickbtn(text, index = 1) {
+  const lowerText = text.toLowerCase();
+  const matches = [...document.querySelectorAll("button")].filter(btn =>
+    btn.textContent.toLowerCase().includes(lowerText)
+  );
+  const button = matches[index - 1];
+  if (button) button.click();
+}
+
+function clickUntilGone(price, index = 1, maxClicks = 10) {
+  return new Promise((resolve) => {
+    let count = 0;
+    const interval = setInterval(() => {
+      if (!isRunning) { clearInterval(interval); return resolve(); }
+      const btns = [...document.querySelectorAll("button")].filter(b =>
+        b.textContent.includes(price)
+      );
+      const btn = btns[index - 1];
+      if (btn && count < maxClicks) {
+        btn.click();
+        count++;
+      } else {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 1000);
+  });
+}
+
+function move(direction) {
+  const keyMap = {
+    left: "ArrowLeft", right: "ArrowRight",
+    up: "ArrowUp", down: "ArrowDown",
+    " ": " ", space: " "
+  };
+  const key = keyMap[direction.toLowerCase?.() || direction];
+  if (!key) return;
+  const keyCode = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, " ": 32 }[key];
+  const options = { key, code: key === " " ? "Space" : key, keyCode, which: keyCode, bubbles: true };
+  const down = new KeyboardEvent("keydown", options);
+  const up = new KeyboardEvent("keyup", options);
+  window.dispatchEvent(down);
+  window.dispatchEvent(up);
+}
+
+async function run(tasks, delay = 500) {
+  for (const task of tasks) {
+    if (!isRunning) return;
+    await task();
+    await new Promise(res => setTimeout(res, delay));
+  }
+}
+
+async function buyinshop(price) {
+  addLog(`🛒 Buying: ${price}`);
+  await clickbtn(price, 1);
+  await clickUntilGone(price, 2);
+}
+
+async function buyegg() {
+  await run([
+    () => clickbtn("shop", 1),
+    () => move("up"), () => move(" "),
+    () => buyinshop("100,000"),
+    () => buyinshop("1,000,000"),
+    () => buyinshop("10,000,000")
+  ], 1000);
+}
+
+async function buyseed() {
+  await run([
+    () => clickbtn("shop", 1),
+    () => move(" "), 
+    () => buyinshop("1,000"),
+    () => buyinshop("3,000"),
+    () => buyinshop("20,000"),
+    () => buyinshop("400,000"),
+    () => buyinshop("100,000,000"),
+    () => buyinshop("1,000,000,000")
+  ], 1000);
+}
+
+async function buytool() {
+  await run([
+    () => clickbtn("shop", 1),
+    () => move("left"), () => move("left"), () => move("left"),
+    () => move(" "),
+    () => buyinshop("25,000")
+  ], 1000);
+}
+
+async function getPetFood(seedText) {
+  await run([ () => clickbtn(seedText) ], 500);
+}
+
+async function buyall_custom(options) {
+  const release = await mutex.acquire();
+  try {
+    if (!isRunning) return;
+    addLog("🚀 Running auto-buy...");
+    if (options.buySeed) await buyseed();
+    if (options.buyEgg) await buyegg();
+    if (options.buyTool) await buytool();
+    if (options.feed) await getPetFood("Sunflower Seed");
+    await clickbtn("my garden");
+    addLog("✅ Cycle completed.");
+  } catch (err) {
+    console.error("❌ Lỗi:", err);
+    addLog(`❌ Error: ${err}`);
+  } finally {
+    release();
+  }
+}
+
+// ====== Nút Start/Stop ======
+document.getElementById("startBtn").onclick = () => {
+  const opts = {
+    buySeed: document.getElementById("chkSeed").checked,
+    buyEgg: document.getElementById("chkEgg").checked,
+    buyTool: document.getElementById("chkTool").checked,
+    feed: document.getElementById("chkFeed").checked
+  };
+  addLog("▶️ Auto-buy started.");
+  isRunning = true;
+  if (loopInterval) clearInterval(loopInterval);
+  buyall_custom(opts);
+  loopInterval = setInterval(() => {
+    if (isRunning) buyall_custom(opts);
+  }, 5 * 60 * 1000);
+};
+
+document.getElementById("stopBtn").onclick = () => {
+  isRunning = false;
+  if (loopInterval) clearInterval(loopInterval);
+  addLog("⏹ Auto-buy stopped.");
+  clickbtn("my garden"); // Về home
+};
+//tự động online
+Object.defineProperty(document, 'hidden', {
+  get: () => false,
+  configurable: true
+});
+
+Object.defineProperty(document, 'visibilityState', {
+  get: () => 'visible',
+  configurable: true
+});
+
+document.hasFocus = () => true;
+
+// Chặn các sự kiện game dùng để pause
+window.addEventListener = new Proxy(window.addEventListener, {
+  apply(target, thisArg, args) {
+    const [event] = args;
+    if (['blur', 'visibilitychange'].includes(event)) return;
+    return Reflect.apply(target, thisArg, args);
+  }
+});
